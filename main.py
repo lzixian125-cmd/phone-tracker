@@ -50,7 +50,7 @@ def report():
     for app_name, app_data in data.items():
         today_sessions = [s for s in app_data.get("sessions", []) if s["date"] == today]
         total = sum(s["minutes"] for s in today_sessions)
-        result[app_name] = {"今日使用次数": len(today_sessions), "今日总分钟数": total}
+        result[app_name] = {"count": len(today_sessions), "minutes": total}
     return {"date": today, "report": result}
 
 @app.get("/health")
