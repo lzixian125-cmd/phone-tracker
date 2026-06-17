@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from datetime import datetime, timezone, timedelta
+from urllib.parse import unquote
 import json, os
 
 app = FastAPI()
@@ -18,6 +19,7 @@ def save(data):
 
 @app.get("/toggle/{app_name}")
 def toggle(app_name: str):
+    app_name = unquote(app_name)
     data = load()
     now = datetime.now(CST)
     now_str = now.isoformat()
