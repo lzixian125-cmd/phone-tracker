@@ -1,56 +1,69 @@
 from fastapi import FastAPI
 from datetime import datetime, timezone, timedelta
-from urllib.parse import unquote, unquote_plus
-import json, os
+import httpx, os
 
 app = FastAPI()
-DATA_FILE = "applog.json"
 CST = timezone(timedelta(hours=8))
 
-def load():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE) as f:
-            return json.load(f)
-    return {}
+SUPABASE_URL = "https://tzycnotzddttithceexi.supabase.co"
+SUPABASE_KEY = "sb_publishable_w_N1p1DFQj4Qow8osWdscw_qphHqXa1"
+HEADERS = {
+    "apikey": SUPABASE_KEY,
+    "Authorization": f"Bearer {SUPABASE_KEY}",
+    "Content-Type": "application/json"
+}
 
-def save(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, ensure_ascii=False)
-
-@app.get("/toggle/{app_name}")
-def toggle(app_name: str):
-    app_name = unquote_plus(app_name)
-    data = load()
+@app.get("/toggle/{app_name:path}")
+async def toggle(app_name: str):
     now = datetime.now(CST)
     now_str = now.isoformat()
-    if app_name not in data:
-        data[app_name] = {"status": "closed", "sessions": []}
-    app_data = data[app_name]
-    if app_data["status"] == "closed":
-        app_data["status"] = "open"
-        app_data["last_open"] = now_str
-        save(data)
-        return {"app": app_name, "action": "opened"}
-    else:
-        open_time = datetime.fromisoformat(app_data["last_open"])
-        duration = int((now - open_time).total_seconds() / 60)
-        app_data["status"] = "closed"
-        app_data["sessions"].append({"date": now.strftime("%Y-%m-%d"), "open": app_data["last_open"], "close": now_str, "minutes": duration})
-        cutoff = (now - timedelta(days=7)).strftime("%Y-%m-%d")
-        app_data["sessions"] = [s for s in app_data["sessions"] if s["date"] >= cutoff]
-        save(data)
-        return {"app": app_name, "action": "closed", "duration_minutes": duration}
+    
+    async with httpx.AsyncClient() as client:
+        r = await client.get(
+            f"{SUPABASE_URL}/rest/v1/app_sessions",
+            params={"app_name": f"eq.{app_name}", "closed_at": "is.null", "order": "opened_at.desc", "limit": "1"},
+            headers=HEADERS
+        )
+        rows = r.json()
+        
+        if not rows:
+            await client.post(
+                f"{SUPABASE_URL}/rest/v1/app_sessions",
+                json={"app_name": app_name, "opened_at": now_str},
+                headers=HEADERS
+            )
+            return {"app": app_name, "action": "opened"}
+        else:
+            row = rows[0]
+            open_time = datetime.fromisoformat(row["opened_at"])
+            duration = int((now - open_time).total_seconds() / 60)
+            await client.patch(
+                f"{SUPABASE_URL}/rest/v1/app_sessions",
+                params={"id": f"eq.{row['id']}"},
+                json={"closed_at": now_str, "minutes": duration},
+                headers=HEADERS
+            )
+            return {"app": app_name, "action": "closed", "duration_minutes": duration}
 
 @app.get("/report")
-def report():
-    data = load()
+async def report():
     now = datetime.now(CST)
     today = now.strftime("%Y-%m-%d")
+    async with httpx.AsyncClient() as client:
+        r = await client.get(
+            f"{SUPABASE_URL}/rest/v1/app_sessions",
+            params={"opened_at": f"gte.{today}", "order": "opened_at.desc"},
+            headers=HEADERS
+        )
+        rows = r.json()
     result = {}
-    for app_name, app_data in data.items():
-        today_sessions = [s for s in app_data.get("sessions", []) if s["date"] == today]
-        total = sum(s["minutes"] for s in today_sessions)
-        result[app_name] = {"count": len(today_sessions), "minutes": total}
+    for row in rows:
+        name = row["app_name"]
+        if name not in result:
+            result[name] = {"count": 0, "minutes": 0}
+        if row["closed_at"]:
+            result[name]["count"] += 1
+            result[name]["minutes"] += row["minutes"] or 0
     return {"date": today, "report": result}
 
 @app.get("/health")
