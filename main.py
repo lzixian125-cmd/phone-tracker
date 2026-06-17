@@ -66,6 +66,16 @@ async def report():
             result[name]["minutes"] += row["minutes"] or 0
     return {"date": today, "report": result}
 
+@app.get("/sessions")
+async def sessions():
+    async with httpx.AsyncClient() as client:
+        r = await client.get(
+            f"{SUPABASE_URL}/rest/v1/app_sessions",
+            params={"order": "opened_at.desc", "limit": "20"},
+            headers=HEADERS
+        )
+        return r.json()
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
