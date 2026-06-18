@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi_mcp import FastApiMCP
 from datetime import datetime, timezone, timedelta
 import httpx, os
 
@@ -79,3 +80,6 @@ async def sessions():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+mcp = FastApiMCP(app)
+mcp.mount()
