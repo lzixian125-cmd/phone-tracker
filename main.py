@@ -4,10 +4,12 @@ from datetime import datetime, timezone, timedelta
 import httpx, os
 
 app = FastAPI()
+
 @app.get("/")
 async def root():
-    return {"status": "ok", "message": "小克上线啦"}CST = timezone(timedelta(hours=8))
+    return {"status": "ok", "message": "小克上线啦"}
 
+CST = timezone(timedelta(hours=8))
 SUPABASE_URL = "https://tzycnotzddttithceexi.supabase.co"
 SUPABASE_KEY = "sb_publishable_w_N1p1DFQj4Qow8osWdscw_qphHqXa1"
 HEADERS = {
